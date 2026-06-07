@@ -27,7 +27,7 @@ class tacticalengine:
         self.font=pygame.font.SysFont("Consolas",16)
         self.alert_font=pygame.font.SysFont("Consolas",20,bold=True)        
         self.radar_zones = [
-            {"x": 300,  "y": 250, "radius": 150},
+            {"x": 380,  "y": 280, "radius": 150},
             {"x": 950,  "y": 200, "radius": 180},  
             {"x": 640,  "y": 550, "radius": 130}   
         ]
@@ -130,8 +130,8 @@ class tacticalengine:
                 ]  
                 current_drone_color = Colour_alert if self.active_risk_per > 0 else Colour_drone    
                 pygame.draw.polygon(self.screen,current_drone_color,ucav_points,2)
-                pygame.draw.rect(self.screen, (5, 8, 12), (15, 15, 300, 100))
-                pygame.draw.rect(self.screen, Colour_grid, (15, 15, 300, 100), 1)
+                pygame.draw.rect(self.screen, (5, 8, 12), (15, 15, 340, 140))
+                pygame.draw.rect(self.screen, Colour_grid, (15, 15, 340, 140), 1)
                 txtpos=f"Ucav Coords x:[{int (self.drone_x)}] y:[{int(self.drone_y)}]"
                 txtrisk=f"Threat level:{self.active_risk_per}%"
                 txt_tgt_dist=f"TARGET DISTANCE:{int(distance_to_target)}px"
