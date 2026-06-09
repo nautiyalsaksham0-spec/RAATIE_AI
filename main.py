@@ -39,6 +39,8 @@ class tacticalengine:
         self.target_speed_inkmh=1200
         self.target_rcs_size = 5.5
         self.target_priority = "LOW"
+        self.planner=AStarPlanner(Window_width, Window_height, Grid_size)
+        self.calculated_flight=[]
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -70,21 +72,28 @@ class tacticalengine:
                     elif event.type==pygame.KEYDOWN:
                             if event.key==pygame.K_ESCAPE:
                                 self.is_running=False
+            self.update_target_kinematics()
+            distance_to_target=math.sqrt((self.drone_x - self.target_x)**2 + (self.drone_y - self.target_y)**2)
+            self.target_priority=self.evaluate_target(distance_to_target)
+            self.calculated_flight=self.planner.compute_flight_path(
+                (self.drone_x,self.drone_y), 
+                (self.target_x,self.target_y), 
+                self.radar_zones
+            )
+            is_accelerating = False
+            if self.calculated_flight:
+                next_waypoint=self.calculated_flight[0]
+                is_accelerating=True
+                dx=next_waypoint[0]-self.drone_x
+                dy=next_waypoint[1]-self.drone_y
+                step_distance=math.sqrt(dx**2+dy**2)
+                if step_distance>0:
+                    self.drone_x+=(dx/step_distance)*self.drone_speed
+                    self.drone_y+=(dy/step_distance)*self.drone_speed                
                             
-                keys=pygame.key.get_pressed()
-                is_accelerating=False
-                if keys[pygame.K_LEFT]:
-                    self.drone_x-=self.drone_speed
-                    is_accelerating=True
-                if keys[pygame.K_RIGHT]:
-                    self.drone_x+=self.drone_speed
-                    is_accelerating=True 
-                if keys[pygame.K_UP]:
-                    self.drone_y-=self.drone_speed
-                    is_accelerating=True
-                if keys[pygame.K_DOWN]:
-                    self.drone_y+=self.drone_speed
-                    is_accelerating=True  
+              
+                
+                      
                 self.drone_x=max(20,min(self.drone_x,Window_width-20))
                 self.drone_y=max(20,min(self.drone_y,Window_height-20))
                 self.active_risk_per=self.cal_threat()
