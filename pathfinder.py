@@ -36,7 +36,7 @@ class A_star:
 
             open_set.remove(current)
             for neighbor in self.get_neighbors(current):
-                step_cost = self.calculate_heuristic(current, neighbor)
+                step_cost = self.calc_heuristic(current, neighbor)
                 threat_penalty = 0.0
                 for radar in radar_zones:
                     dx=neighbor[0]-radar["x"]
@@ -45,11 +45,11 @@ class A_star:
                     if dist_to_radar<radar["radius"]:
                         intensity_gradient=(1.0-(dist_to_radar/radar["radius"]))
                         threat_penalty+=intensity_gradient*5000.0
-            tentative_g_score=g_score[current]+step_cost+threat_penalty
+                tentative_g_score=g_score[current]+step_cost+threat_penalty
                 if tentative_g_score<g_score.get(neighbor, float('inf')):
                     came_from[neighbor]=current
                     g_score[neighbor]=tentative_g_score
-                    f_score[neighbor]=tentative_g_score+self.calculate_heuristic(neighbor, goal_node)
+                    f_score[neighbor]=tentative_g_score+self.calc_heuristic(neighbor, target_node)
                     if neighbor not in open_set:
                         open_set.add(neighbor)
 
