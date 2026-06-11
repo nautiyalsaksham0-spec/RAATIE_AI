@@ -149,7 +149,7 @@ class tacticalengine:
                 txt_status = "SYSTEM STATUS: WARNING - RADAR LOCK DETECTED" if self.active_risk_per > 0 else "SYSTEM STATUS: AUTONOMOUS FLIGHT ACTIVE"
                 status_color = Colour_alert if self.active_risk_per > 0 else Colour_drone
             else:
-                txt_status = "SYSTEM STATUS: AIRSPACE CLEAR"
+                txt_status = "SYSTEM STATUS: AUTONOMOUS FLIGHT ACTIVE"
                 status_color = Colour_drone
             if self.target_priority=="CRITICAL THREAT":
                 priority_color = Colour_alert
