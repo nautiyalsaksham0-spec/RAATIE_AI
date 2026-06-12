@@ -2,7 +2,9 @@ import numpy as np
 import pygame
 import sys
 import math
+import random
 from pathfinder import A_star
+from particles import ParticleEmitter 
 Window_width=1280
 Window_height=720
 Grid_size=40
@@ -42,6 +44,7 @@ class tacticalengine:
         self.target_priority = "LOW"
         self.planner=A_star(Window_width, Window_height, Grid_size)
         self.calculated_flight=[]
+        self.emitter = ParticleEmitter()
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -94,6 +97,12 @@ class tacticalengine:
             self.drone_x=max(20,min(self.drone_x,Window_width-20))
             self.drone_y=max(20,min(self.drone_y,Window_height-20))
             self.active_risk_per=self.cal_threat()
+            if distance_to_target<35:
+                self.emitter.trigger_explosion(int(self.target_x),int(self.target_y),Colour_target)
+                self.target_x=random.randint(80,Window_width-80)
+                self.target_y=random.randint(80,Window_height-80)
+                self.target_speed_x = random.choice([-2.5, -2.0, 2.0, 2.5])
+                self.target_speed_y = random.choice([-1.8, -1.2, 1.2, 1.8])
             self.screen.fill(Colour_bg)
             for x in range(0,Window_width,Grid_size):
                 pygame.draw.line(self.screen,Colour_grid,(x,0),(x,Window_height),1)
@@ -118,6 +127,7 @@ class tacticalengine:
                 (self.target_x, self.target_y + 12),  
                 (self.target_x - 12, self.target_y) 
             ]
+            self.emitter.update_and_render(self.screen)
             pygame.draw.polygon(self.screen, Colour_target, target_diamond_points, 2)
             pygame.draw.rect(self.screen, Colour_alert, (self.target_x - 3, self.target_y - 3, 6, 6))
             if is_accelerating:
