@@ -5,6 +5,7 @@ import math
 import random
 from pathfinder import A_star
 from particles import ParticleEmitter 
+from rcs_model import StealthModel
 Window_width=1280
 Window_height=720
 Grid_size=40
@@ -44,7 +45,8 @@ class tacticalengine:
         self.target_priority = "LOW"
         self.planner=A_star(Window_width, Window_height, Grid_size)
         self.calculated_flight=[]
-        self.emitter = ParticleEmitter()
+        self.emitter=ParticleEmitter()
+        self.stealth_system=StealthModel()
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -109,12 +111,22 @@ class tacticalengine:
             for y in range(0,Window_height,Grid_size):  
                 pygame.draw.line(self.screen,Colour_grid,(0,y),(Window_width,y),1)
             for radar in self.radar_zones:
-                surface_size=radar["radius"]*2
-                radar_sur=pygame.Surface((surface_size,surface_size),pygame.SRCALPHA)
-                pygame.draw.circle(radar_sur,(255,50,50,45),(radar['radius'],radar["radius"]),radar["radius"])
-                pygame.draw.circle(radar_sur, (255, 50, 50, 120), (radar["radius"], radar["radius"]), radar["radius"], 1)
-                self.screen.blit(radar_sur, (radar["x"] - radar["radius"], radar["y"] - radar["radius"]))
-                pygame.draw.circle(self.screen,Colour_alert,(radar["x"],radar["y"]),3)
+               # Layer 2: Dynamic Stealth Radars
+            for radar in self.radar_zones:
+                # 1. Ask rcs_model.py for our current wing exposure score (0.01 to 0.50)
+                current_rcs = self.stealth_system.calculate_aspect_rcs(
+                    (self.drone_x, self.drone_y),
+                    (self.target_x, self.target_y),
+                    radar
+                )
+                dynamic_radius=int(radar["radius"] * (current_rcs / 0.50))
+                dynamic_radius=max(30,dynamic_radius) 
+                surface_size=dynamic_radius*2
+                radar_sur=pygame.Surface((surface_size, surface_size), pygame.SRCALPHA)
+                pygame.draw.circle(radar_sur, (255, 50, 50, 45), (dynamic_radius, dynamic_radius), dynamic_radius)
+                pygame.draw.circle(radar_sur, (255, 50, 50, 120), (dynamic_radius, dynamic_radius), dynamic_radius, 1)
+                self.screen.blit(radar_sur, (radar["x"] - dynamic_radius, radar["y"] - dynamic_radius))
+                pygame.draw.circle(self.screen, Colour_alert, (radar["x"], radar["y"]), 3)
             if len(self.calculated_flight) > 1:
                 for i in range(len(self.calculated_flight) - 1):
                     p1 = self.calculated_flight[i]
