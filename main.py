@@ -111,9 +111,6 @@ class tacticalengine:
             for y in range(0,Window_height,Grid_size):  
                 pygame.draw.line(self.screen,Colour_grid,(0,y),(Window_width,y),1)
             for radar in self.radar_zones:
-               # Layer 2: Dynamic Stealth Radars
-            for radar in self.radar_zones:
-                # 1. Ask rcs_model.py for our current wing exposure score (0.01 to 0.50)
                 current_rcs = self.stealth_system.calculate_aspect_rcs(
                     (self.drone_x, self.drone_y),
                     (self.target_x, self.target_y),
