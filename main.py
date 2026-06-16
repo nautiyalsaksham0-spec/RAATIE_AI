@@ -6,6 +6,7 @@ import random
 from pathfinder import A_star
 from particles import ParticleEmitter 
 from rcs_model import StealthModel
+from target_classifier import RadarContactClassifier
 Window_width=1280
 Window_height=720
 Grid_size=40
@@ -47,6 +48,7 @@ class tacticalengine:
         self.calculated_flight=[]
         self.emitter=ParticleEmitter()
         self.stealth_system=StealthModel()
+        self.iff_classifier=RadarContactClassifier()
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -55,14 +57,7 @@ class tacticalengine:
                current_risk=(1-(distance/radar["radius"]))*100
                if current_risk>max_risk:
                     max_risk=current_risk
-        return round(max_risk,1)      
-    def evaluate_target(self,distance_to_target):
-           if distance_to_target <300 or self.target_speed_inkmh > 2000:
-              return"CRITICAL THREAT"
-           elif distance_to_target < 600 and self.target_rcs_size > 2.0:
-              return"TACTICAL ENGAGEMENT"
-           else:
-            return"LOW PRIORITY"  
+        return round(max_risk,1)        
     def update_target_kinematics(self):
         self.target_x += self.target_speed_x
         self.target_y += self.target_speed_y  
@@ -79,8 +74,16 @@ class tacticalengine:
                     if event.key==pygame.K_ESCAPE:
                          self.is_running=False
             self.update_target_kinematics()
-            distance_to_target=math.sqrt((self.drone_x - self.target_x)**2 + (self.drone_y - self.target_y)**2)
-            self.target_priority=self.evaluate_target(distance_to_target)
+            distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
+            base_x,base_y=Window_width//2,Window_height//2
+            dx_base=self.target_x-base_x
+            dy_base=self.target_y-base_y
+            distance_to_base=math.sqrt(dx_base**2+dy_base**2)
+            self.target_priority=self.iff_classifier.classify_contact(
+                rcs_size=self.target_rcs_size,
+                speed_kmh=self.target_speed_inkmh,
+                distance_px=distance_to_base
+            ) 
             self.calculated_flight=self.planner.compute_flight_path(
                 (self.drone_x,self.drone_y), 
                 (self.target_x,self.target_y), 
@@ -105,6 +108,8 @@ class tacticalengine:
                 self.target_y=random.randint(80,Window_height-80)
                 self.target_speed_x = random.choice([-2.5, -2.0, 2.0, 2.5])
                 self.target_speed_y = random.choice([-1.8, -1.2, 1.2, 1.8])
+                self.target_speed_inkmh=random.randint(100, 2400)
+                self.target_rcs_size=random.uniform(0.01, 25.0)
             self.screen.fill(Colour_bg)
             for x in range(0,Window_width,Grid_size):
                 pygame.draw.line(self.screen,Colour_grid,(x,0),(x,Window_height),1)
@@ -168,14 +173,14 @@ class tacticalengine:
                 txt_status = "SYSTEM STATUS: WARNING - RADAR LOCK DETECTED" if self.active_risk_per > 0 else "SYSTEM STATUS: AUTONOMOUS FLIGHT ACTIVE"
                 status_color = Colour_alert if self.active_risk_per > 0 else Colour_drone
             else:
-                txt_status = "SYSTEM STATUS: AUTONOMOUS FLIGHT ACTIVE"
-                status_color = Colour_drone
-            if self.target_priority=="CRITICAL THREAT":
-                priority_color = Colour_alert
-            elif self.target_priority=="TACTICAL ENGAGEMENT":
-                priority_color = Colour_target
+                txt_status="SYSTEM STATUS: AUTONOMOUS FLIGHT ACTIVE"
+                status_color=Colour_drone
+            if self.target_priority=="HOSTILE":
+                priority_color=Colour_alert
+            elif self.target_priority=="BOGEY(UNKNOWN)":
+                priority_color=Colour_target
             else:
-                priority_color = Colour_vector
+                priority_color=Colour_vector
             self.screen.blit(self.font.render(txtpos, True, Colour_text), (25, 25))
             self.screen.blit(self.font.render(txtrisk, True, status_color), (25, 50))
             self.screen.blit(self.font.render(txt_status, True, status_color), (25, 75))
