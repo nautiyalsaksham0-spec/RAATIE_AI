@@ -142,7 +142,13 @@ class tacticalengine:
                 (self.target_x - 12, self.target_y) 
             ]
             self.emitter.update_and_render(self.screen)
-            pygame.draw.polygon(self.screen, Colour_target, target_diamond_points, 2)
+            pulse_speed=0.05
+            pulse_val=(math.sin(pygame.time.get_ticks()*pulse_speed)+1)/2 
+            if self.target_priority=="HOSTILE":
+                draw_width=2+int(pulse_val*4)
+            else:
+                draw_width=2
+            pygame.draw.polygon(self.screen, Colour_target, target_diamond_points, draw_width)
             pygame.draw.rect(self.screen, Colour_alert, (self.target_x - 3, self.target_y - 3, 6, 6))
             if is_accelerating:
                 thrust_points=[
