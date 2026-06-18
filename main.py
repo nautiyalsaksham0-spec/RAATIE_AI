@@ -7,6 +7,7 @@ from pathfinder import A_star
 from particles import ParticleEmitter 
 from rcs_model import StealthModel
 from target_classifier import RadarContactClassifier
+from kalman_fusion import KalmanFilter
 Window_width=1280
 Window_height=720
 Grid_size=40
@@ -37,8 +38,9 @@ class tacticalengine:
             {"x": 640,  "y": 550, "radius": 130}   
         ]
         self.active_risk_per=0.0
-        self.target_x = 100
-        self.target_y = 100
+        self.target_x=100
+        self.target_y=100
+        self.frame_count=0
         self.target_speed_x = 2.0 
         self.target_speed_y = 1.5
         self.target_speed_inkmh=1200
@@ -49,6 +51,8 @@ class tacticalengine:
         self.emitter=ParticleEmitter()
         self.stealth_system=StealthModel()
         self.iff_classifier=RadarContactClassifier()
+        self.kalman_x=KalmanFilter(process_variance=0.1,measurement_variance=10.0)
+        self.kalman_y=KalmanFilter(process_variance=0.1,measurement_variance=10.0)
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -74,6 +78,8 @@ class tacticalengine:
                     if event.key==pygame.K_ESCAPE:
                          self.is_running=False
             self.update_target_kinematics()
+            self.target_x=self.kalman_x.update(self.target_x)
+            self.target_y=self.kalman_y.update(self.target_y)
             distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
             base_x,base_y=Window_width//2,Window_height//2
             dx_base=self.target_x-base_x
@@ -84,11 +90,13 @@ class tacticalengine:
                 speed_kmh=self.target_speed_inkmh,
                 distance_px=distance_to_base
             ) 
-            self.calculated_flight=self.planner.compute_flight_path(
-                (self.drone_x,self.drone_y), 
-                (self.target_x,self.target_y), 
-                self.radar_zones
-            )
+            self.frame_count+=1
+            if self.frame_count % 5 == 0:
+               self.calculated_flight=self.planner.compute_flight_path(
+                 (self.drone_x,self.drone_y), 
+                 (self.target_x,self.target_y), 
+                 self.radar_zones
+                )
             is_accelerating = False
             if self.calculated_flight:
                 next_waypoint=self.calculated_flight[0]
@@ -104,10 +112,12 @@ class tacticalengine:
             self.active_risk_per=self.cal_threat()
             if distance_to_target<35:
                 self.emitter.trigger_explosion(int(self.target_x),int(self.target_y),Colour_target)
+                self.kalman_x=KalmanFilter(0.1, 10.0)
+                self.kalman_y=KalmanFilter(0.1, 10.0)
                 self.target_x=random.randint(80,Window_width-80)
                 self.target_y=random.randint(80,Window_height-80)
-                self.target_speed_x = random.choice([-2.5, -2.0, 2.0, 2.5])
-                self.target_speed_y = random.choice([-1.8, -1.2, 1.2, 1.8])
+                self.target_speed_x=random.choice([-2.5, -2.0, 2.0, 2.5])
+                self.target_speed_y=random.choice([-1.8, -1.2, 1.2, 1.8])
                 self.target_speed_inkmh=random.randint(100, 2400)
                 self.target_rcs_size=random.uniform(0.01, 25.0)
             self.screen.fill(Colour_bg)
