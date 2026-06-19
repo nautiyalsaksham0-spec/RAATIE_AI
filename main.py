@@ -38,8 +38,8 @@ class tacticalengine:
             {"x": 640,  "y": 550, "radius": 130}   
         ]
         self.active_risk_per=0.0
-        self.target_x=100
-        self.target_y=100
+        self.target_x=100.0
+        self.target_y=100.0
         self.frame_count=0
         self.target_speed_x = 2.0 
         self.target_speed_y = 1.5
@@ -51,8 +51,12 @@ class tacticalengine:
         self.emitter=ParticleEmitter()
         self.stealth_system=StealthModel()
         self.iff_classifier=RadarContactClassifier()
+        self.target_x = 100.0
+        self.target_y = 100.0
         self.kalman_x=KalmanFilter(process_variance=0.1,measurement_variance=10.0)
+        self.kalman_x.x = self.target_x
         self.kalman_y=KalmanFilter(process_variance=0.1,measurement_variance=10.0)
+        self.kalman_y.x = self.target_y
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -78,8 +82,8 @@ class tacticalengine:
                     if event.key==pygame.K_ESCAPE:
                          self.is_running=False
             self.update_target_kinematics()
-            self.target_x=self.kalman_x.update(self.target_x)
-            self.target_y=self.kalman_y.update(self.target_y)
+            visual_x = self.kalman_x.update(self.target_x)
+            visual_y = self.kalman_y.update(self.target_y)
             distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
             base_x,base_y=Window_width//2,Window_height//2
             dx_base=self.target_x-base_x
@@ -112,10 +116,10 @@ class tacticalengine:
             self.active_risk_per=self.cal_threat()
             if distance_to_target<35:
                 self.emitter.trigger_explosion(int(self.target_x),int(self.target_y),Colour_target)
-                self.kalman_x=KalmanFilter(0.1, 10.0)
-                self.kalman_y=KalmanFilter(0.1, 10.0)
-                self.target_x=random.randint(80,Window_width-80)
-                self.target_y=random.randint(80,Window_height-80)
+                new_x=random.randint(80,Window_width-80)
+                new_y=random.randint(80,Window_height-80)
+                self.target_x = self.kalman_x.reset(new_x)
+                self.target_y = self.kalman_y.reset(new_y) 
                 self.target_speed_x=random.choice([-2.5, -2.0, 2.0, 2.5])
                 self.target_speed_y=random.choice([-1.8, -1.2, 1.2, 1.8])
                 self.target_speed_inkmh=random.randint(100, 2400)
@@ -144,12 +148,15 @@ class tacticalengine:
                     p1 = self.calculated_flight[i]
                     p2 = self.calculated_flight[i+1]
                     pygame.draw.line(self.screen, Colour_vector, p1, p2, 2)
-            pygame.draw.line(self.screen, Colour_vector, (self.drone_x, self.drone_y), (self.target_x, self.target_y), 1)
+            if visual_x is not None and visual_y is not None:
+                pygame.draw.line(self.screen, Colour_vector, (self.drone_x, self.drone_y), (int(visual_x), int(visual_y)), 1)
+            else:
+                pygame.draw.line(self.screen, Colour_vector, (self.drone_x, self.drone_y), (int(self.target_x), int(self.target_y)), 1)
             target_diamond_points = [
-                (self.target_x, self.target_y - 12),
-                (self.target_x + 12, self.target_y),  
-                (self.target_x, self.target_y + 12),  
-                (self.target_x - 12, self.target_y) 
+                (int(visual_x), int(visual_y) - 12),
+                (int(visual_x) + 12, int(visual_y)),  
+                (int(visual_x), int(visual_y) + 12),  
+                (int(visual_x) - 12, int(visual_y)) 
             ]
             self.emitter.update_and_render(self.screen)
             pulse_speed=0.05
@@ -159,7 +166,7 @@ class tacticalengine:
             else:
                 draw_width=2
             pygame.draw.polygon(self.screen, Colour_target, target_diamond_points, draw_width)
-            pygame.draw.rect(self.screen, Colour_alert, (self.target_x - 3, self.target_y - 3, 6, 6))
+            pygame.draw.rect(self.screen, Colour_alert, (visual_x - 3, visual_y - 3, 6, 6))
             if is_accelerating:
                 thrust_points=[
                     (self.drone_x-15,self.drone_y+10),
