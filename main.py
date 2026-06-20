@@ -8,6 +8,7 @@ from particles import ParticleEmitter
 from rcs_model import StealthModel
 from target_classifier import RadarContactClassifier
 from kalman_fusion import KalmanFilter
+from bvr_engagement import BVRMissile
 Window_width=1280
 Window_height=720
 Grid_size=40
@@ -57,6 +58,7 @@ class tacticalengine:
         self.kalman_x.x = self.target_x
         self.kalman_y=KalmanFilter(process_variance=0.1,measurement_variance=10.0)
         self.kalman_y.x = self.target_y
+        self.bvr_missile = None
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -82,6 +84,13 @@ class tacticalengine:
                     if event.key==pygame.K_ESCAPE:
                          self.is_running=False
             self.update_target_kinematics()
+            if hasattr(self, 'bvr_missile') and self.bvr_missile is not None and self.bvr_missile.active:
+                status = self.bvr_missile.update((self.target_x,self.target_y))
+                mx, my = int(self.bvr_missile.pos[0]),int(self.bvr_missile.pos[1])
+                pygame.draw.circle(self.screen,(255, 0, 0),(mx, my),5)
+                if status=="EXPLODE":
+                  self.emitter.trigger_explosion(mx, my, Colour_target)
+                  self.bvr_missile = None
             visual_x = self.kalman_x.update(self.target_x)
             visual_y = self.kalman_y.update(self.target_y)
             distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
@@ -94,6 +103,13 @@ class tacticalengine:
                 speed_kmh=self.target_speed_inkmh,
                 distance_px=distance_to_base
             ) 
+            if self.target_priority == "HOSTILE":
+             if not hasattr(self, 'bvr_missile') or (self.bvr_missile is None or not self.bvr_missile.active):
+               self.bvr_missile = BVRMissile(
+                start_pos=(self.drone_x, self.drone_y),
+                target_pos=(self.target_x, self.target_y),
+                target_vel=(self.target_speed_x, self.target_speed_y)
+             )
             self.frame_count+=1
             if self.frame_count % 5 == 0:
                self.calculated_flight=self.planner.compute_flight_path(
@@ -108,9 +124,11 @@ class tacticalengine:
                 dx=next_waypoint[0]-self.drone_x
                 dy=next_waypoint[1]-self.drone_y
                 step_distance=math.sqrt(dx**2+dy**2)
-                if step_distance>0:
+                if step_distance>10:
                     self.drone_x+=(dx/step_distance)*self.drone_speed
-                    self.drone_y+=(dy/step_distance)*self.drone_speed                
+                    self.drone_y+=(dy/step_distance)*self.drone_speed 
+                else:
+                    self.calculated_flight.pop(0)                   
             self.drone_x=max(20,min(self.drone_x,Window_width-20))
             self.drone_y=max(20,min(self.drone_y,Window_height-20))
             self.active_risk_per=self.cal_threat()
@@ -166,7 +184,7 @@ class tacticalengine:
             else:
                 draw_width=2
             pygame.draw.polygon(self.screen, Colour_target, target_diamond_points, draw_width)
-            pygame.draw.rect(self.screen, Colour_alert, (visual_x - 3, visual_y - 3, 6, 6))
+            pygame.draw.rect(self.screen, Colour_alert, (int(visual_x) - 3, int(visual_y) - 3, 6, 6))
             if is_accelerating:
                 thrust_points=[
                     (self.drone_x-15,self.drone_y+10),
