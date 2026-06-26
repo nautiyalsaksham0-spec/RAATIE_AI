@@ -10,7 +10,6 @@ from target_classifier import RadarContactClassifier
 from kalman_fusion import KalmanFilter
 from radar_intelligence import RadarConfidenceTracker
 from evasion_agent import EvasionAgent
-from bvr_engagement import BVRMissile
 from rl_navigator import QLearningNavigator
 Window_width=1280
 Window_height=720
@@ -63,8 +62,10 @@ class tacticalengine:
         self.kalman_y.x=self.target_y
         self.ucav_brain=QLearningNavigator()
         self.enemy_brain = EvasionAgent()
-        self.radar_tracker = RadarConfidenceTracker()
-        self.bvr_missile = None
+        self.radar_tracker = RadarConfidenceTracker() 
+        self.launch_threshold = 10
+        self.last_radar_radius = 60
+        self.state = "NAVIGATING"
     def cal_threat(self):
         max_risk=0.0
         for radar in self.radar_zones:
@@ -93,68 +94,58 @@ class tacticalengine:
             visual_x = self.kalman_x.update(self.target_x)
             visual_y = self.kalman_y.update(self.target_y)
             distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
-            base_x,base_y=Window_width//2,Window_height//2
-            dx_base=self.target_x-base_x
-            dy_base=self.target_y-base_y
-            distance_to_base=math.sqrt(dx_base**2+dy_base**2)
             self.target_priority = self.iff_classifier.classify_contact(
                 rcs_size=self.target_rcs_size,
                 speed_kmh=self.target_speed_inkmh,
-                distance_px=distance_to_base # or use distance_to_target depending on your logic
+                distance_px=distance_to_target 
             )
-            signal = 1.0 - (distance_to_target / 1200) 
-            conf = self.radar_tracker.update(signal_strength=max(0, signal))
-            if self.target_priority == "HOSTILE" and conf > 0.8:
-                if self.bvr_missile is None or not self.bvr_missile.active:
-                    print(f"DEBUG: Launching from {self.drone_x}, {self.drone_y}")
-                    self.bvr_missile = BVRMissile(
-                        start_pos=(self.drone_x, self.drone_y),
-                        target_pos=(self.target_x, self.target_y),
-                        target_vel=(self.target_speed_x, self.target_speed_y)
-                    )
-            if self.bvr_missile:
-                if self.target_priority != "HOSTILE":
-                    self.bvr_missile = None 
-                elif self.bvr_missile.active:
-                    status = self.bvr_missile.update((self.target_x, self.target_y), self.target_priority)
-                    if status == "EXPLODE":
-                        ex, ey = int(self.bvr_missile.pos[0]), int(self.bvr_missile.pos[1])
-                        self.emitter.trigger_explosion(ex, ey, Colour_target)
-                        self.bvr_missile = None
-                    elif status == "INACTIVE":
-                        self.bvr_missile = None 
-                    else:
-                        bearing = math.atan2(self.bvr_missile.pos[1] - self.target_y, 
-                                             self.bvr_missile.pos[0] - self.target_x)
-                        state = (int(distance_to_target/100), int(bearing * 10))
-                        action = self.enemy_brain.get_action(state)
-                        reward = 1 if self.bvr_missile.active else -100
-                        next_state = (int(distance_to_target/100), int(bearing * 10))
-                        self.enemy_brain.learn(state, action, reward, next_state)
-            self.frame_count+=1
-            if self.frame_count % 5 == 0:
+            signal=1.0-(distance_to_target / 1200) 
+            conf=self.radar_tracker.update(signal_strength=max(0, signal))
+            state=(int(self.drone_x//Grid_size),int(self.drone_y//Grid_size))
+            self.active_risk_per = self.cal_threat()
+            if self.active_risk_per > 80:
+                self.state = "NAVIGATING"
+            elif distance_to_target < 100 and self.target_priority == "HOSTILE":
+                self.state = "ENGAGING"
+            else:
+                self.state = "NAVIGATING"
+            is_accelerating=False
+            if self.state=="NAVIGATING":
+             self.frame_count+=1    
+             if self.frame_count%5==0:
                self.calculated_flight=self.planner.compute_flight_path(
                  (self.drone_x,self.drone_y), 
                  (self.target_x,self.target_y), 
                  self.radar_zones
                 )
-               state = (int(self.drone_x // Grid_size), int(self.drone_y // Grid_size))
-            is_accelerating = False
-            if self.calculated_flight:
-                next_waypoint = self.calculated_flight[0]
+             if self.calculated_flight:
+                    next_waypoint = self.calculated_flight[0]
+                    is_accelerating = True
+                    dx = next_waypoint[0] - self.drone_x
+                    dy = next_waypoint[1] - self.drone_y
+                    step_distance = math.sqrt(dx**2 + dy**2)
+                    if step_distance > 5:
+                        self.drone_x += (dx / step_distance) * self.drone_speed
+                        self.drone_y += (dy / step_distance) * self.drone_speed 
+                    else:
+                        self.calculated_flight.pop(0)
+            elif self.state == "ENGAGING":           
+             self.calculated_flight = []
+             distance_to_target = math.sqrt((self.drone_x - self.target_x)**2 + (self.drone_y - self.target_y)**2)  
+             if distance_to_target > 45:
                 is_accelerating = True
-                dx = next_waypoint[0] - self.drone_x
-                dy = next_waypoint[1] - self.drone_y
+                dx = self.target_x - self.drone_x
+                dy = self.target_y - self.drone_y
                 step_distance = math.sqrt(dx**2 + dy**2)
-                if step_distance > 5:
-                    self.drone_x += (dx / step_distance) * self.drone_speed
-                    self.drone_y += (dy / step_distance) * self.drone_speed 
-                else:
-                    self.calculated_flight.pop(0)                  
+                if step_distance > 0: 
+                        self.drone_x += (dx / step_distance) * self.drone_speed
+                        self.drone_y += (dy / step_distance) * self.drone_speed
+            else:
+                is_accelerating = False                          
             self.drone_x=max(20,min(self.drone_x,Window_width-20))
             self.drone_y=max(20,min(self.drone_y,Window_height-20))
-            self.active_risk_per=self.cal_threat()
-            if distance_to_target<35:
+            if distance_to_target < 50 and self.target_priority == "HOSTILE":
+                pygame.draw.line(self.screen, (255, 0, 0), (self.drone_x, self.drone_y), (self.target_x, self.target_y), 3)
                 self.emitter.trigger_explosion(int(self.target_x),int(self.target_y),Colour_target)
                 new_x=random.randint(80,Window_width-80)
                 new_y=random.randint(80,Window_height-80)
@@ -169,17 +160,15 @@ class tacticalengine:
                 pygame.draw.line(self.screen,Colour_grid,(x,0),(x,Window_height),1)
             for y in range(0,Window_height,Grid_size):  
                 pygame.draw.line(self.screen,Colour_grid,(0,y),(Window_width,y),1)
-            if self.bvr_missile and self.bvr_missile.active:
-                mx, my = int(self.bvr_missile.pos[0]), int(self.bvr_missile.pos[1])
-                pygame.draw.circle(self.screen, (255, 0, 0), (mx, my), 5)
             for radar in self.radar_zones:
                 current_rcs = self.stealth_system.calculate_aspect_rcs(
                     (self.drone_x, self.drone_y),
                     (self.target_x, self.target_y),
                     radar
                 )
-                dynamic_radius=int(radar["radius"] * (current_rcs / 0.50))
-                dynamic_radius=max(30,dynamic_radius) 
+                target_radius = int(radar["radius"] * (current_rcs / 0.50))
+                self.last_radar_radius = int(self.last_radar_radius * 0.9 + target_radius * 0.1)
+                dynamic_radius = max(40, min(self.last_radar_radius, 200))
                 surface_size=dynamic_radius*2
                 radar_sur=pygame.Surface((surface_size, surface_size), pygame.SRCALPHA)
                 pygame.draw.circle(radar_sur, (255, 50, 50, 45), (dynamic_radius, dynamic_radius), dynamic_radius)
