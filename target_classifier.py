@@ -3,6 +3,7 @@ from sklearn.tree import DecisionTreeClassifier
 
 class RadarContactClassifier:
     def __init__(self):
+        np.random.seed(42)
         X_train=[]
         y_train=[]
         self.class_labels = {0:"FRIENDLY",1:"BOGEY(UNKNOWN)", 2:"HOSTILE"}

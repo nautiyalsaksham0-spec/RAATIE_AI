@@ -7,11 +7,15 @@ class KalmanFilter:
         self.x=0.0                    
         self.k=0.0
     def update(self, measurement):
-        self.p=self.p+self.q 
-        self.k=self.p/(self.p+self.r)
-        self.x=self.x+self.k*(measurement-self.x)
-        self.p=(1-self.k)*self.p 
-        return self.x
+        if isinstance(measurement, (tuple, list)):
+            val = measurement[0]
+        else:
+            val = measurement
+        self.p = self.p + self.q
+        self.k = self.p / (self.p + self.r)
+        self.x = self.x + self.k * (val - self.x)
+        self.p = (1 - self.k) * self.p
+        return self.x  
     def reset(self, new_value):
         self.x = float(new_value)
         self.p = 1.0    
