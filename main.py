@@ -70,6 +70,7 @@ class tacticalengine:
         max_risk=0.0
         for radar in self.radar_zones:
             distance=math.sqrt((self.drone_x-radar["x"])**2+(self.drone_y-radar["y"])**2)
+            print(f"Drone at ({int(self.drone_x)}, {int(self.drone_y)}) | Radar at ({radar['x']}, {radar['y']}) | Dist: {int(distance)} | Radius: {radar['radius']}")
             if distance<radar["radius"]:
                current_risk=(1-(distance/radar["radius"]))*100
                if current_risk>max_risk:
@@ -84,6 +85,7 @@ class tacticalengine:
             self.target_speed_y *= -1      
     def run(self):
         while self.is_running:
+            print(f"DEBUG: Priority={self.target_priority}, State={self.state}, CalculatedFlightLen={len(self.calculated_flight)}")
             for event in pygame.event.get():
                 if event.type==pygame.QUIT:
                     self.is_running=False
@@ -94,6 +96,7 @@ class tacticalengine:
             visual_x = self.kalman_x.update(self.target_x)
             visual_y = self.kalman_y.update(self.target_y)
             distance_to_target=math.sqrt((self.drone_x-self.target_x)**2+(self.drone_y-self.target_y)**2)
+            print(f"DEBUG: RCS={self.target_rcs_size}, Speed={self.target_speed_inkmh}, Dist={int(distance_to_target)}")
             self.target_priority = self.iff_classifier.classify_contact(
                 rcs_size=self.target_rcs_size,
                 speed_kmh=self.target_speed_inkmh,
@@ -102,10 +105,9 @@ class tacticalengine:
             signal=1.0-(distance_to_target / 1200) 
             conf=self.radar_tracker.update(signal_strength=max(0, signal))
             state=(int(self.drone_x//Grid_size),int(self.drone_y//Grid_size))
-            self.active_risk_per = self.cal_threat()
-            if self.active_risk_per > 80:
+            if self.active_risk_per > 70:
                 self.state = "NAVIGATING"
-            elif distance_to_target < 100 and self.target_priority == "HOSTILE":
+            elif self.target_priority == "HOSTILE" and distance_to_target < 100:
                 self.state = "ENGAGING"
             else:
                 self.state = "NAVIGATING"
@@ -118,30 +120,37 @@ class tacticalengine:
                  (self.target_x,self.target_y), 
                  self.radar_zones
                 )
-             if self.calculated_flight:
+             if not self.calculated_flight:
+                        print("DEBUG: Planner returned NO PATH. Are the radar zones blocking the target?")   
+             if self.calculated_flight and len(self.calculated_flight) > 0:
                     next_waypoint = self.calculated_flight[0]
                     is_accelerating = True
                     dx = next_waypoint[0] - self.drone_x
                     dy = next_waypoint[1] - self.drone_y
-                    step_distance = math.sqrt(dx**2 + dy**2)
-                    if step_distance > 5:
-                        self.drone_x += (dx / step_distance) * self.drone_speed
-                        self.drone_y += (dy / step_distance) * self.drone_speed 
-                    else:
-                        self.calculated_flight.pop(0)
+                    move_speed = self.drone_speed
+             else:
+                    dx = self.target_x - self.drone_x
+                    dy = self.target_y - self.drone_y
+                    move_speed = self.drone_speed*0.5
+             step_distance = math.sqrt(dx**2 + dy**2)
+             if step_distance > 5:
+                        is_accelerating = True
+                        self.drone_x += (dx / step_distance) *move_speed 
+                        self.drone_y += (dy / step_distance) *move_speed
+             elif self.calculated_flight:
+                    self.calculated_flight.pop(0)
             elif self.state == "ENGAGING":           
              self.calculated_flight = []
-             distance_to_target = math.sqrt((self.drone_x - self.target_x)**2 + (self.drone_y - self.target_y)**2)  
              if distance_to_target > 45:
                 is_accelerating = True
                 dx = self.target_x - self.drone_x
                 dy = self.target_y - self.drone_y
                 step_distance = math.sqrt(dx**2 + dy**2)
                 if step_distance > 0: 
-                        self.drone_x += (dx / step_distance) * self.drone_speed
-                        self.drone_y += (dy / step_distance) * self.drone_speed
+                        self.drone_x+=(dx/step_distance)*self.drone_speed
+                        self.drone_y+=(dy/step_distance)*self.drone_speed
             else:
-                is_accelerating = False                          
+                is_accelerating=False                          
             self.drone_x=max(20,min(self.drone_x,Window_width-20))
             self.drone_y=max(20,min(self.drone_y,Window_height-20))
             if distance_to_target < 50 and self.target_priority == "HOSTILE":
