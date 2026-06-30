@@ -103,7 +103,8 @@ class tacticalengine:
                 distance_px=distance_to_target 
             )
             signal=1.0-(distance_to_target / 1200) 
-            conf=self.radar_tracker.update(signal_strength=max(0, signal))
+            is_stealth = self.target_rcs_size < 1.0
+            conf=self.radar_tracker.update(signal_strength=max(0, signal), is_stealth_target=is_stealth)
             state=(int(self.drone_x//Grid_size),int(self.drone_y//Grid_size))
             if self.active_risk_per > 70:
                 self.state = "NAVIGATING"
